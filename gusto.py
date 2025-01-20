@@ -84,9 +84,11 @@ result = grouped_dp.merge(dff, on='Particulars_number', how='left')
 sum_empty_pending = result.loc[result['MyBeat Plan'].isna(), 'Total Pending'].sum()
 dff = dff.merge(grouped_dp, on='Particulars_number', how='left')
 
-dff['Pending_Status'] = dff['Total Pending'].apply(lambda x: "No pending" if pd.isna(x) else "Pending")
-
+dff['Pending_Status'] = dff['Total Pending'].apply(
+    lambda x: "No pending" if pd.isna(x) or x == 0 else "Pending"
+)
 dff = dff.merge(df2, on='Outlet Erp Id', how='left')
+
 dynamic_filters = DynamicFilters(dff, filters=["Territory","Final_Beats","Is Active","Pending_Status"])    
 dynamic_filters.display_filters(location='sidebar')
 df = dynamic_filters.filter_df()
