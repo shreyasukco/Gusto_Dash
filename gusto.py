@@ -17,6 +17,7 @@ from streamlit_folium import st_folium
 from scipy.spatial.distance import cdist
 from babel.numbers import format_currency
 from datetime import datetime
+
 import time
 
 st.set_page_config(
@@ -36,15 +37,17 @@ def read_data1(file):
     return df
 try:
     dff = read_data('Gusto_my_record_18012025.xlsx')
-    dp=read_data1('colection18012025.xlsx')
+    dp=read_data1('collection21012025withnovdec.xlsx')
 
 except FileNotFoundError:
     st.error("The file  was not found. Please check the file path and try again.")
     st.stop()
-
+current_date = datetime.now().date()
+formatted_date = current_date.strftime("%d/%m/%y")
 dp.columns = dp.columns.str.strip()
-df2=pd.read_excel("erpid_prnding110125.xlsx")
-df3=pd.read_excel("Gusto_beat_count.xlsx")
+# st.write(dp.columns)
+df2=pd.read_excel("erpidpending amount11022025withnovdec.xlsx")
+df3=pd.read_excel("beat_total11022025withnovdec.xlsx")
 
 dff["Google Maps Link"] = dff.apply(
     lambda row: f"https://www.google.com/maps?q={row['Latitude']},{row['Longitude']}",
@@ -63,9 +66,6 @@ dff = dff.drop_duplicates(subset='Particulars_number', keep='first')
 # dp['Particulars_number'] = dp['Particulars'].str.extract(r'(\d{9})')
 dp['Particulars_number'] = dp['Particulars'].str.extract(r'(\d{9})')
 
-df = dff.drop_duplicates(subset="Outlets Name", keep="first")
-
-
 dff['LAT'] = dff['Latitude'].astype(float)
 dff['LONG'] = dff['Longitude'].astype(float)
 
@@ -77,33 +77,60 @@ dp['Sum of Diff'] = pd.to_numeric(dp['Sum of Diff'], errors='coerce')
 dp['Sum of Diff'] = dp['Sum of Diff'].fillna(0)
 grouped_dp = dp.groupby('Particulars_number', as_index=False)['Sum of Diff'].sum()
 
-# Step 3: Rename the column to 'Total Pending'
+#Rename the column to 'Total Pending'
 grouped_dp.rename(columns={'Sum of Diff': 'Total Pending'}, inplace=True)
 
 result = grouped_dp.merge(dff, on='Particulars_number', how='left')
 sum_empty_pending = result.loc[result['MyBeat Plan'].isna(), 'Total Pending'].sum()
+
 dff = dff.merge(grouped_dp, on='Particulars_number', how='left')
 
 dff['Pending_Status'] = dff['Total Pending'].apply(
     lambda x: "No pending" if pd.isna(x) or x == 0 else "Pending"
 )
+
 dff = dff.merge(df2, on='Outlet Erp Id', how='left')
 
+def process_dataframe(df):
+    try:
+        # Check if the required columns exist
+        if 'Total Pending(11/01/25)' in df.columns and 'Total Pending' in df.columns:
+            # Convert columns to numeric to avoid errors
+            df['Total Pending(11/01/25)'] = pd.to_numeric(df['Total Pending(11/01/25)'], errors='coerce')
+            df['Total Pending'] = pd.to_numeric(df['Total Pending'], errors='coerce')
+
+            # Add the "Collected Amount" column (difference between the two columns)
+            df['Collected Amount'] = df['Total Pending(11/01/25)'] - df['Total Pending']
+
+            # Reorder columns to place 'Collected Amount' after 'Total Pending(11/01/25)'
+            columns = df.columns.tolist()
+            index = columns.index('Total Pending(11/01/25)')
+            columns.insert(index + 1, columns.pop(columns.index('Collected Amount')))
+            df = df[columns]
+
+            # Calculate the percentage difference
+            df['Percent_diff'] = ((df['Total Pending(11/01/25)'] - df['Total Pending']) / df['Total Pending']) * 100
+
+            # Replace extremely small values (close to zero) with 0
+            df['Percent_diff'] = df['Percent_diff'].apply(lambda x: 0 if abs(x) < 1e-10 else x)
+
+            # Format the percentage difference column to two decimal places
+            df['Percent_diff'] = df['Percent_diff'].apply(lambda x: f"{x:.2f}%")
+        else:
+            st.error("Required columns 'Total Pending(11/01/25)' or 'Total Pending' are missing.")
+    except Exception as e:
+        st.error(f"An error occurred while processing the DataFrame: {e}")
+    return df
+dff = process_dataframe(dff)    
+dd=dff
+# st.write(dd)   
 dynamic_filters = DynamicFilters(dff, filters=["Territory","Final_Beats","Is Active","Pending_Status"])    
 dynamic_filters.display_filters(location='sidebar')
 df = dynamic_filters.filter_df()
 
-unique_names = df['Final_Beats'].unique().tolist()
-t=0
-for name in unique_names:
-    filtered_dff2 = df3[df3['Final_Beats'] == name]    
-    if not filtered_dff2.empty:  
-        t += filtered_dff2['Total_Pending_Amount'].sum()
 
-formatted_amount4 = format_currency(t, "INR", locale="en_IN", currency_digits=False, format="¤#,##,##0")
 center_lat = np.mean(df['LAT'])
 center_lon = np.mean(df['LONG'])
-# filtered_df['Combined Category'] = filtered_df['Brand Presence'].astype(str) + ' | ' + filtered_df['Milk Products SKUs'].astype(str)
 custom_color_map = {
     "Pending": "red",        
     "No pending": "green",    
@@ -126,7 +153,7 @@ fig = px.scatter_mapbox(
     
 )
 
-# Fix marker style (without 'line' property)
+
 fig.update_traces(marker=dict(size=12, opacity=0.8))
 
 # Set the map style (open street map is interactive with drag/zoom)
@@ -141,8 +168,7 @@ fig.update_layout(
     ),
     margin={"r":0,"t":0,"l":0,"b":0}  # Remove margins to ensure full map area
 )
-# st.write(beatwise_pending_amount)
-# Display the map in Streamlit
+
 total_rows = dff.shape[0]
 total_rows1=df.shape[0]
 
@@ -152,10 +178,14 @@ outlet_counts1 = dff['Final_Beats'].value_counts()
 pending_outlets_count=df[df["Pending_Status"]=="Pending"].shape[0]
 
 non_null_count = int(result['Total Pending'].sum())
+nn=int(df["Total Pending(11/01/25)"].sum())
+# st.write(nn)
+formatted_amount5 = format_currency(nn, "INR", locale="en_IN", currency_digits=False, format="¤#,##,##0")
 total_matched_amount=int(non_null_count-sum_empty_pending)
 formatted_amount = format_currency(total_matched_amount, "INR", locale="en_IN", currency_digits=False, format="¤#,##,##0")
 # formatted_amount = f"₹{total_matched_amount:,}".replace(',', ',')
 n= int(df['Total Pending'].sum() )
+
 formatted_amount3 = format_currency(n, "INR", locale="en_IN", currency_digits=False, format="¤#,##,##0")
 dff = dff.drop_duplicates(subset="Outlets Name", keep="first")
 new_df = dp[dp['Particulars_number'].isnull() | (dp['Particulars_number'] == '')]
@@ -169,13 +199,11 @@ r=int(non_null_count1+sum_empty_pending)
 formatted_amount2 = format_currency(r, "INR", locale="en_IN", currency_digits=False, format="¤#,##,##0")
 
 with col1:
-    st.metric(label="Matched records pending amount", value=str(formatted_amount))
+    st.metric(label=f"Matched records pending amount({formatted_date})", value=str(formatted_amount))
 with col2:
-    st.metric(label="unmatched records pending amount ", value=str(formatted_amount2))
+    st.metric(label=f"unmatched records pending amount({formatted_date})", value=str(formatted_amount2))
 with col3:
     st.metric(label="Universal outlets", value=f"{total_rows:,}")
-# with col4:
-#     st.metric(label="Possible duplicates", value=str("(Developing)"))
 
 col1, col2, col3, col4 = st.columns(4)
 with col1:
@@ -183,23 +211,21 @@ with col1:
 with col2:
     st.metric(label="Pending outlets", value=f"{pending_outlets_count:,}")
 with col3:
-    st.metric(label="TOTAL pending amount / beat", value=str(formatted_amount4))
+    # st.metric(label="TOTAL pending amount / beat", value=str(formatted_amount4))
+    st.metric(label="TOTAL Pending Amount / Beat(11/01/25)", value=str(formatted_amount5))
 with col4:
-    st.metric(label="Current pending amount / beat", value=str(formatted_amount3))    
+    st.metric(label=f"Current Pending Amount / Beat({formatted_date})", value=str(formatted_amount3))    
     
 
 st.plotly_chart(fig)
-# st.write(df)
-current_date = datetime.now().date()
-formatted_date = current_date.strftime("%d/%m/%y")
+
 b= (
-    dff.groupby(["Final_Beats"])["Total Pending"]
+    dd.groupby(["Final_Beats"])["Total Pending"]
     .sum()
     .reset_index()
-    .rename(columns={"Total Pending": f"Total Pending({formatted_date})"})
+    # .rename(columns={"Total Pending": f"Total Pending({formatted_date})"})
 )
-# b= b.rename(columns={"final_beat_plan": "Final_Beats"})
-# st.write(b)
+
 selected_beats = st.multiselect(
     "Select Beat Names:",
     options=dff["Final_Beats"].unique(),  
@@ -210,15 +236,19 @@ d=df3.merge(b,on='Final_Beats', how='left')
 d.index = range(1, len(d) + 1)  # Set index starting from 1
 d.index.name = "Beat No"
 
-d = d.rename(columns={"Total_Pending_Amount": "Total Pending(11/01/25)"})
+d = process_dataframe(d)
+d = process_dataframe(d)
+
+d = d.rename(columns={"Total Pending": f"Total Pending({formatted_date})"})
+
 if selected_beats: 
     fi = dff[dff["Final_Beats"].isin(selected_beats)]
     pending_outlets_df = fi[fi["Pending_Status"] == "Pending"]
 
     # Select only the required columns
-    pending_outlets_df = pending_outlets_df[["Final_Beats", "Outlets Name", "Total Pending(11/01/25)", "Total Pending"]]
+    pending_outlets_df = pending_outlets_df[["Final_Beats", "Outlets Name","Total Pending(11/01/25)","Collected Amount" ,"Total Pending","Percent_diff"]]
     pending_outlets_df = pending_outlets_df.rename(columns={"Total Pending": f"Total Pending({formatted_date})"})
-    # Display the filtered DataFrame in Streamlit
+    pending_outlets_df = pending_outlets_df.sort_values(by="Final_Beats")
     pending_outlets_df.index = range(1, len(pending_outlets_df) + 1)  # Set index starting from 1
     pending_outlets_df.index.name = "SI No"
     st.write(pending_outlets_df)
