@@ -109,13 +109,9 @@ def process_dataframe(df):
             df = df[columns]
 
             # Calculate the percentage difference
-            df['Percent_diff'] = ((df['Total Pending(11/01/25)'] - df['Total Pending']) / df['Total Pending']) * 100
-
-            # Replace extremely small values (close to zero) with 0
-            df['Percent_diff'] = df['Percent_diff'].apply(lambda x: 0 if abs(x) < 1e-10 else x)
-
-            # Format the percentage difference column to two decimal places
-            df['Percent_diff'] = df['Percent_diff'].apply(lambda x: f"{x:.2f}%")
+            df.loc[:, 'Percent_diff'] = ((df['Total Pending(11/01/25)'] - df['Total Pending']) / df['Total Pending']) * 100
+            df.loc[:, 'Percent_diff'] = df['Percent_diff'].apply(lambda x: 0 if abs(x) < 1e-10 else x)
+            df.loc[:, 'Percent_diff'] = df['Percent_diff'].apply(lambda x: f"{x:.2f}%")
         else:
             st.error("Required columns 'Total Pending(11/01/25)' or 'Total Pending' are missing.")
     except Exception as e:
@@ -244,8 +240,6 @@ d = d.rename(columns={"Total Pending": f"Total Pending({formatted_date})"})
 if selected_beats: 
     fi = dff[dff["Final_Beats"].isin(selected_beats)]
     pending_outlets_df = fi[fi["Pending_Status"] == "Pending"]
-
-    # Select only the required columns
     pending_outlets_df = pending_outlets_df[["Final_Beats", "Outlets Name","Total Pending(11/01/25)","Collected Amount" ,"Total Pending","Percent_diff"]]
     pending_outlets_df = pending_outlets_df.rename(columns={"Total Pending": f"Total Pending({formatted_date})"})
     pending_outlets_df = pending_outlets_df.sort_values(by="Final_Beats")
