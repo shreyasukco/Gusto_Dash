@@ -1,0 +1,4 @@
+# Ignore temporary Excel files
+~$*.xlsx
+# Exclude all temporary Excel files
+~$*.xlsx

@@ -109,9 +109,16 @@ def process_dataframe(df):
             df = df[columns]
 
             # Calculate the percentage difference
-            df.loc[:, 'Percent_diff'] = ((df['Total Pending(11/01/25)'] - df['Total Pending']) / df['Total Pending']) * 100
-            df.loc[:, 'Percent_diff'] = df['Percent_diff'].apply(lambda x: 0 if abs(x) < 1e-10 else x)
-            df.loc[:, 'Percent_diff'] = df['Percent_diff'].apply(lambda x: f"{x:.2f}%")
+            df['Percent_diff'] = ((df['Total Pending(11/01/25)'] - df['Total Pending']) / df['Total Pending']) * 100
+
+        # Replace very small differences with 0
+            df['Percent_diff'] = df['Percent_diff'].apply(lambda x: 0 if abs(x) < 1e-10 else x)
+
+        # Keep a numeric version of Percent_diff for computation
+            df['Percent_diff_numeric'] = df['Percent_diff']
+
+        # Format the 'Percent_diff' column as strings with percentages
+            df['Percent_diff'] = df['Percent_diff'].apply(lambda x: f"{x:.2f}%")
         else:
             st.error("Required columns 'Total Pending(11/01/25)' or 'Total Pending' are missing.")
     except Exception as e:
