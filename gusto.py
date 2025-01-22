@@ -49,16 +49,16 @@ dp.columns = dp.columns.str.strip()
 df2=pd.read_excel("erpidpending amount11022025withnovdec.xlsx")
 df3=pd.read_excel("beat_total11022025withnovdec.xlsx")
 
-dff["Google Maps Link"] = dff.apply(
-    lambda row: f"https://www.google.com/maps?q={row['Latitude']},{row['Longitude']}",
-    axis=1
-)
+# dff["Google Maps Link"] = dff.apply(
+#     lambda row: f"https://www.google.com/maps?q={row['Latitude']},{row['Longitude']}",
+#     axis=1
+# )
 dff["Last Modified On"] = pd.to_datetime(dff["Last Modified On"])
 
 cutoff_date = datetime.now() - timedelta(days=9*30)
 
-dff["Is Active"] = dff["Last Modified On"].apply(lambda x: "Active" if x >= cutoff_date else "Inactive")
-dff['Particulars_number'] = dff['Outlet Erp Id'].str.extract(r'(\d{9})')
+dff.loc[:, "Is Active"] = dff["Last Modified On"].apply(lambda x: "Active" if x >= cutoff_date else "Inactive")
+dff.loc[:, 'Particulars_number'] = dff['Outlet Erp Id'].str.extract(r'(\d{9})')
 
 dff = dff[dff['Particulars_number'].notna()]
 dff = dff.drop_duplicates(subset='Particulars_number', keep='first')
