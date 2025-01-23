@@ -1,5 +1,5 @@
-import streamlit as st # type: ignore
-import pandas as pd # type: ignore
+import streamlit as st 
+import pandas as pd 
 import seaborn as sns
 import matplotlib.pyplot as plt
 import plotly.express as px
@@ -13,14 +13,11 @@ from streamlit_dynamic_filters import DynamicFilters
 from datetime import datetime, timedelta
 import pandas as pd
 from sklearn.cluster import KMeans
-import folium # type: ignore
-from streamlit_folium import st_folium  # type: ignore
 from scipy.spatial.distance import cdist 
 from babel.numbers import format_currency # type: ignore
 from datetime import datetime
-from rapidfuzz.fuzz import ratio # type: ignore
 import time
-from streamlit_option_menu import option_menu # type: ignore
+
 
 st.set_page_config(
     page_title='GUSTO DASHBOARD',          
