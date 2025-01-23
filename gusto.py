@@ -18,7 +18,6 @@ from streamlit_folium import st_folium  # type: ignore
 from scipy.spatial.distance import cdist 
 from babel.numbers import format_currency # type: ignore
 from datetime import datetime
-from geopy.distance import geodesic # type: ignore
 from rapidfuzz.fuzz import ratio # type: ignore
 import time
 from streamlit_option_menu import option_menu # type: ignore
