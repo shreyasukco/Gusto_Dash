@@ -4,6 +4,7 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 import plotly.express as px
 import numpy as np
+import json
 from mpl_toolkits.mplot3d import Axes3D
 import re
 import plotly.graph_objects as go
@@ -12,13 +13,15 @@ from streamlit_dynamic_filters import DynamicFilters
 from datetime import datetime, timedelta
 import pandas as pd
 from sklearn.cluster import KMeans
-import folium
-from streamlit_folium import st_folium
-from scipy.spatial.distance import cdist
-from babel.numbers import format_currency
+import folium # type: ignore
+from streamlit_folium import st_folium  # type: ignore
+from scipy.spatial.distance import cdist 
+from babel.numbers import format_currency # type: ignore
 from datetime import datetime
-
+from geopy.distance import geodesic # type: ignore
+from rapidfuzz.fuzz import ratio # type: ignore
 import time
+from streamlit_option_menu import option_menu # type: ignore
 
 st.set_page_config(
     page_title='GUSTO DASHBOARD',          
@@ -26,7 +29,7 @@ st.set_page_config(
     layout="wide",        
     initial_sidebar_state="auto"  
 )
-@st.cache_data
+@st.cache_data   
 def read_data(file):
     df = pd.read_excel(file)
     return df
@@ -48,22 +51,20 @@ dp.columns = dp.columns.str.strip()
 # st.write(dp.columns)
 df2=pd.read_excel("erpidpending amount11022025withnovdec.xlsx")
 df3=pd.read_excel("beat_total11022025withnovdec.xlsx")
-
-# dff["Google Maps Link"] = dff.apply(
-#     lambda row: f"https://www.google.com/maps?q={row['Latitude']},{row['Longitude']}",
-#     axis=1
-# )
+dff["Google Maps Link"] = dff.apply(
+    lambda row: f"https://www.google.com/maps?q={row['Latitude']},{row['Longitude']}",
+    axis=1
+)
 dff["Last Modified On"] = pd.to_datetime(dff["Last Modified On"])
 
 cutoff_date = datetime.now() - timedelta(days=9*30)
 
-dff.loc[:, "Is Active"] = dff["Last Modified On"].apply(lambda x: "Active" if x >= cutoff_date else "Inactive")
-dff.loc[:, 'Particulars_number'] = dff['Outlet Erp Id'].str.extract(r'(\d{9})')
+dff["Is Active"] = dff["Last Modified On"].apply(lambda x: "Active" if x >= cutoff_date else "Inactive")
+dff['Particulars_number'] = dff['Outlet Erp Id'].str.extract(r'(\d{9})')
 
 dff = dff[dff['Particulars_number'].notna()]
 dff = dff.drop_duplicates(subset='Particulars_number', keep='first')
 
-# dp['Particulars_number'] = dp['Particulars'].str.extract(r'(\d{9})')
 dp['Particulars_number'] = dp['Particulars'].str.extract(r'(\d{9})')
 
 dff['LAT'] = dff['Latitude'].astype(float)
@@ -109,16 +110,16 @@ def process_dataframe(df):
             df = df[columns]
 
             # Calculate the percentage difference
-            df['Percent_diff'] = ((df['Total Pending(11/01/25)'] - df['Total Pending']) / df['Total Pending']) * 100
+            df['Pending_Percent_diff'] = ((df['Total Pending(11/01/25)'] - df['Total Pending']) / df['Total Pending']) * 100
 
-        # Replace very small differences with 0
-            df['Percent_diff'] = df['Percent_diff'].apply(lambda x: 0 if abs(x) < 1e-10 else x)
+            # Replace extremely small values (close to zero) with 0
+            df['Pending_Percent_diff'] = df['Pending_Percent_diff'].apply(lambda x: 0 if abs(x) < 1e-10 else x)
 
-        # Keep a numeric version of Percent_diff for computation
-            df['Percent_diff_numeric'] = df['Percent_diff']
-
-        # Format the 'Percent_diff' column as strings with percentages
-            df['Percent_diff'] = df['Percent_diff'].apply(lambda x: f"{x:.2f}%")
+            # Subtract the percentage from 100 to get the desired value
+            df['Pending_Percent_diff'] = 100 - df['Pending_Percent_diff']
+            df['Pending_Percent_diff'] = df['Pending_Percent_diff'].abs()
+            # Format the percentage difference column to two decimal places
+            df['Pending_Percent_diff'] = df['Pending_Percent_diff'].apply(lambda x: f"{x:.2f}%")
         else:
             st.error("Required columns 'Total Pending(11/01/25)' or 'Total Pending' are missing.")
     except Exception as e:
@@ -127,13 +128,13 @@ def process_dataframe(df):
 dff = process_dataframe(dff)    
 dd=dff
 # st.write(dd)   
-dynamic_filters = DynamicFilters(dff, filters=["Territory","Final_Beats","Is Active","Pending_Status"])    
+dynamic_filters = DynamicFilters(dff, filters=["Territory","Final_Beats","Is Active","Pending_Status","Outlets Name"])    
 dynamic_filters.display_filters(location='sidebar')
 df = dynamic_filters.filter_df()
 
-
 center_lat = np.mean(df['LAT'])
 center_lon = np.mean(df['LONG'])
+# filtered_df['Combined Category'] = filtered_df['Brand Presence'].astype(str) + ' | ' + filtered_df['Milk Products SKUs'].astype(str)
 custom_color_map = {
     "Pending": "red",        
     "No pending": "green",    
@@ -156,7 +157,7 @@ fig = px.scatter_mapbox(
     
 )
 
-
+# Fix marker style (without 'line' property)
 fig.update_traces(marker=dict(size=12, opacity=0.8))
 
 # Set the map style (open street map is interactive with drag/zoom)
@@ -171,7 +172,8 @@ fig.update_layout(
     ),
     margin={"r":0,"t":0,"l":0,"b":0}  # Remove margins to ensure full map area
 )
-
+# st.write(beatwise_pending_amount)
+# Display the map in Streamlit
 total_rows = dff.shape[0]
 total_rows1=df.shape[0]
 
@@ -196,28 +198,75 @@ new_df = new_df.reset_index(drop=True)
 new_df["Particulars_number"] = new_df["Particulars"].map(
     dff.set_index("Outlets Name")["Particulars_number"]
 )
-col1, col2 ,col3 = st.columns(3, gap="small", vertical_alignment="top")
+
 non_null_count1 = new_df['Sum of Diff'].sum()
 r=int(non_null_count1+sum_empty_pending)
 formatted_amount2 = format_currency(r, "INR", locale="en_IN", currency_digits=False, format="¤#,##,##0")
+# collected_amount=[1442607,]
+cleaned_amount = int(formatted_amount.replace('₹', '').replace(',', ''))
+# collected_amount.append(int(cleaned_amount))
+# st.write(collected_amount)
+json_file_path = 'matched_amount.json'
+today_date = datetime.now().strftime('%Y-%m-%d')
 
+try:
+    with open(json_file_path, 'r') as file:
+        matched_amount = json.load(file)
+except (FileNotFoundError, json.JSONDecodeError):
+    matched_amount = {}    
+
+if today_date in matched_amount:
+    if matched_amount[today_date] == cleaned_amount:
+        pass
+    else:
+        matched_amount[today_date] = cleaned_amount
+else:
+    matched_amount[today_date] = cleaned_amount
+
+# Save the updated JSON object back to the file
+with open(json_file_path, 'w') as file:
+    json.dump(matched_amount, file, indent=4)
+
+flattened_data = []
+for date, value in matched_amount.items():
+    flattened_data.append((date, value))
+flattened_data.sort(key=lambda x: (x[0], x[1]))
+
+# Ensure there are at least two distinct entries
+if len(flattened_data) >= 2:
+    
+    last_entry = flattened_data[-1]
+    second_last_entry = flattened_data[-2]
+    last_date, last_value = last_entry
+    second_last_date, second_last_value = second_last_entry
+    collected_amount = second_last_value - last_value
+def get_formatted_date(date_obj):
+    return date_obj.strftime('%Y-%m-%d')     
+yesterday_date = get_formatted_date(datetime.now() - timedelta(1)) 
+
+col1, col2 ,col3,col4= st.columns(4, gap="small", vertical_alignment="top")     
+formatted_amount6 = format_currency(collected_amount, "INR", locale="en_IN", currency_digits=False, format="¤#,##,##0")
 with col1:
-    st.metric(label=f"Matched records pending amount({formatted_date})", value=str(formatted_amount))
+    st.metric(label=f"Matched Records ({formatted_date})", value=str(formatted_amount))
 with col2:
-    st.metric(label=f"unmatched records pending amount({formatted_date})", value=str(formatted_amount2))
+    st.metric(label=f"Unmatched Records ({formatted_date})", value=str(formatted_amount2))
 with col3:
-    st.metric(label="Universal outlets", value=f"{total_rows:,}")
+    st.metric(label="Universal Outlets", value=f"{total_rows:,}")
+# with col4:
+#     st.metric(label="Possible duplicates", value=str("(Developing)"))
+with col4:
+    st.metric(label=f"Collected amount ({yesterday_date})", value=str(formatted_amount6))  
 
 col1, col2, col3, col4 = st.columns(4)
 with col1:
-    st.metric(label="Beat outlets", value=f"{total_rows1:,}")
+    st.metric(label="Beat Outlets", value=f"{total_rows1:,}")
 with col2:
-    st.metric(label="Pending outlets", value=f"{pending_outlets_count:,}")
+    st.metric(label="Pending Outlets", value=f"{pending_outlets_count:,}")
 with col3:
     # st.metric(label="TOTAL pending amount / beat", value=str(formatted_amount4))
-    st.metric(label="TOTAL Pending Amount / Beat(11/01/25)", value=str(formatted_amount5))
+    st.metric(label="TOTAL Pending(11/01/25)", value=str(formatted_amount5))
 with col4:
-    st.metric(label=f"Current Pending Amount / Beat({formatted_date})", value=str(formatted_amount3))    
+    st.metric(label=f"Current Pending ({formatted_date})", value=str(formatted_amount3))    
     
 
 st.plotly_chart(fig)
@@ -247,7 +296,9 @@ d = d.rename(columns={"Total Pending": f"Total Pending({formatted_date})"})
 if selected_beats: 
     fi = dff[dff["Final_Beats"].isin(selected_beats)]
     pending_outlets_df = fi[fi["Pending_Status"] == "Pending"]
-    pending_outlets_df = pending_outlets_df[["Final_Beats", "Outlets Name","Total Pending(11/01/25)","Collected Amount" ,"Total Pending","Percent_diff"]]
+
+    # Select only the required columns
+    pending_outlets_df = pending_outlets_df[["Final_Beats", "Outlets Name","Total Pending(11/01/25)","Collected Amount" ,"Total Pending","Pending_Percent_diff"]]
     pending_outlets_df = pending_outlets_df.rename(columns={"Total Pending": f"Total Pending({formatted_date})"})
     pending_outlets_df = pending_outlets_df.sort_values(by="Final_Beats")
     pending_outlets_df.index = range(1, len(pending_outlets_df) + 1)  # Set index starting from 1
