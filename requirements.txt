@@ -5,7 +5,5 @@ seaborn
 matplotlib
 plotly
 scikit-learn
-folium
-streamlit-folium
-babel
 streamlit-dynamic-filters
+openpyxl
