@@ -14,7 +14,7 @@ from datetime import datetime, timedelta
 import pandas as pd
 from sklearn.cluster import KMeans
 from scipy.spatial.distance import cdist 
-from babel.numbers import format_currency # type: ignore
+from babel.numbers import format_currency 
 from datetime import datetime
 import time
 
